@@ -2,6 +2,9 @@
 data/
 *.dcm
 
+# Ignore the build folder
+build/
+
 # CMake
 CMakeLists.txt.user
 CMakeCache.txt
