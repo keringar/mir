@@ -7,28 +7,16 @@ set(CMAKE_CXX_STANDARD_REQUIRED True)
 
 include_directories("include/")
 
-add_library(Core OBJECT
-    "src/Dicom.cpp"
-)
-
-add_executable(mir "src/main.cpp" $<TARGET_OBJECTS:Core>)
-
+add_executable(mir "src/main.cpp" "src/Dicom.cpp")
 set_property(TARGET mir PROPERTY CXX_STANDARD 17)
 
-# Link DCMTK
-if(WIN32)
-    if(DEFINED ENV{DCMTK_HOME})
-        message(STATUS "Found DCMTK_HOME: $ENV{DCMTK_HOME}")
-    else()
-    	message(FATAL_ERROR "Error: DCMTK_HOME not set!")
-    endif()
-    target_include_directories(mir PUBLIC "$ENV{DCMTK_HOME}/include")
-    target_link_directories(mir PUBLIC "$ENV{DCMTK_HOME}/lib")
-    target_link_libraries(mir "opengl32.lib" "ws2_32.lib" "wsock32.lib" "shlwapi.lib" "iphlpapi.lib" "netapi32.lib" "propsys.lib")
-    target_link_libraries(mir PUBLIC "ofstd.lib" "oflog.lib" "dcmdata.lib" "dcmimgle.lib")
-else()
-    target_link_libraries(mir PUBLIC "libz.so" "libofstd.so" "liboflog.so" "libdcmdata.so" "libdcmimgle.so")
+if (WIN32)
+    set(DCMTK_DIR "$ENV{DCMTK_HOME}")
+    target_compile_options(mir PUBLIC /MTd)
+    target_link_options(mir PUBLIC /INCREMENTAL:NO /NODEFAULTLIB:MSVCRT)
 endif()
 
-# Link <filesystem>
-target_link_libraries(mir PUBLIC "stdc++fs")
+# Link DCMTK
+find_package(DCMTK NO_MODULE REQUIRED)
+target_include_directories(mir SYSTEM PUBLIC ${DCMTK_INCLUDE_DIRS})
+target_link_libraries(mir PUBLIC ${DCMTK_LIBRARIES})

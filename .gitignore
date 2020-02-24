@@ -2,8 +2,11 @@
 data/
 *.dcm
 
-# Ignore the build folder
+# Ignore any generated artifacts
 build/
+out/
+.vs/
+CMakeSettings.json
 
 # CMake
 CMakeLists.txt.user

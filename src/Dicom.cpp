@@ -3,10 +3,10 @@
 #include <dcmtk/dcmimgle/dcmimage.h>
 #include <dcmtk/dcmdata/dctk.h>
 #include <vector>
-#include <experimental/filesystem>
+#include <filesystem>
 
 using namespace std;
-using namespace std::experimental::filesystem;
+using namespace std::filesystem;
 
 struct Slice {
     DicomImage* image;
@@ -52,7 +52,10 @@ int Dicom::LoadDicomStack(const string& folder, float3* size) {
     for (const auto& p : directory_iterator(folder))
         if (p.path().extension().string() == ".dcm") {
             images.push_back(ReadDicomSlice(p.path().string()));
-            maxSpacing = max(maxSpacing, images[images.size() - 1].spacing);
+            if (images[images.size() - 1].spacing.x > maxSpacing.x &&
+                images[images.size() - 1].spacing.y > maxSpacing.y) {
+                maxSpacing = images[images.size() - 1].spacing;
+            }
         }
 
     if (images.empty()) return -1;
@@ -69,7 +72,7 @@ int Dicom::LoadDicomStack(const string& folder, float3* size) {
 
     // volume size in meters
     if (size) {
-        float2 b = images[0].location;
+        double2 b = images[0].location;
         for (auto i : images) {
             b.x = (float)fmin(i.location - i.spacing.z * .5, b.x);
             b.y = (float)fmax(i.location + i.spacing.z * .5, b.y);
