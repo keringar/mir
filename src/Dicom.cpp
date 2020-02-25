@@ -1,12 +1,11 @@
 #include "Dicom.hpp"
+#include "filesystem.hpp"
 
 #include <dcmtk/dcmimgle/dcmimage.h>
 #include <dcmtk/dcmdata/dctk.h>
 #include <vector>
-#include <filesystem>
 
 using namespace std;
-using namespace std::filesystem;
 
 struct Slice {
     DicomImage* image;
@@ -42,14 +41,14 @@ Dicom::~Dicom() {
 }
 
 int Dicom::LoadDicomStack(const string& folder, float3* size) {
-    if (!exists(folder)) {
+    if (!filesystem::exists(folder)) {
         printf("Folder does not exist\n");
         return -1;
     }
 
     double3 maxSpacing = 0;
     vector<Slice> images = {};
-    for (const auto& p : directory_iterator(folder))
+    for (const auto& p : filesystem::directory_iterator(folder))
         if (p.path().extension().string() == ".dcm") {
             images.push_back(ReadDicomSlice(p.path().string()));
             if (images[images.size() - 1].spacing.x > maxSpacing.x &&

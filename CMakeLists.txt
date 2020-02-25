@@ -16,6 +16,10 @@ if (WIN32)
     target_link_options(mir PUBLIC /INCREMENTAL:NO /NODEFAULTLIB:MSVCRT)
 endif()
 
+if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+    target_link_libraries(mir PUBLIC stdc++fs)
+endif()
+
 # Link DCMTK
 find_package(DCMTK NO_MODULE REQUIRED)
 target_include_directories(mir SYSTEM PUBLIC ${DCMTK_INCLUDE_DIRS})

@@ -12,7 +12,20 @@ using namespace std;
 #define OUTPUT_HEIGHT 512
 
 uint16_t sample_at(uint16_t* data, uint32_t width, uint32_t height, uint32_t depth, float3 size, float3 world_pos) {
-
+    if (world_pos.x < size.x / 2 && world_pos.x > -size.x / 2) {
+        if (world_pos.y < size.y / 2 && world_pos.y > -size.y / 2) {
+            if (world_pos.z < size.z / 2 && world_pos.z > -size.z / 2) {
+                // Resize volume to between 0 and size
+                world_pos += size / 2.f;
+                
+                // Calculate sample point from world_pos
+                uint32_t index_x = (uint32_t)(width * (world_pos.x / size.x));
+                uint32_t index_y = (uint32_t)(height * (world_pos.y / size.y));
+                uint32_t index_z = (uint32_t)(depth * (world_pos.z / size.z));
+                return data[index_x + (index_y * width) + (index_z * width * height)];
+            }
+        }
+    }
 
     return 0;
 }
@@ -32,11 +45,17 @@ int main(int argc, char** argv) {
         cout << "Successfully loaded DCM stack" << endl;
     }
 
+    const float3 eye = float3(0.f, 0.f, -1.f);
+    const float fov = 90.f;
+    const float width = 
+
     cout << "Raytracing " << OUTPUT_WIDTH << "x" << OUTPUT_HEIGHT << " image" << endl;
     float3* image = new float3[OUTPUT_WIDTH * OUTPUT_HEIGHT];
     for (uint32_t x = 0; x < OUTPUT_WIDTH; x++) {
         for (uint32_t y = 0; y < OUTPUT_HEIGHT; y++) {
-            const float3 eye = float3(0.f, 0.f, -5.f);
+            const float3 eye = float3(0.f, 0.f, -1.f);
+            const float fov = 90.f;
+
             const float3 target = float3(x - (float)(d.width / 2), y - (float)(d.height / 2), 0.0);
             const float3 direction = normalize(target - eye);
 
@@ -47,8 +66,10 @@ int main(int argc, char** argv) {
                 distance += 0.01f;
                 float3 point = eye + (direction * distance);
 
-                if (sample_at(d.data, d.width, d.height, d.depth, size, point) > 0) {
-                    // Hit
+                uint16_t sample = sample_at(d.data, d.width, d.height, d.depth, size, point);
+                if (sample > 0) {
+                    sampled_color = float3(1.f, 1.f, 1.f);
+                    break;
                 }
             }
 
