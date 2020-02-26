@@ -30,14 +30,15 @@ Slice ReadDicomSlice(const string& file) {
 }
 
 Dicom::Dicom() {
-    data = nullptr;
-    width = 0;
-    height = 0;
-    depth = 0;
+    volume.data = nullptr;
+    volume.width = 0;
+    volume.height = 0;
+    volume.depth = 0;
+    volume.size = 0;
 }
 
 Dicom::~Dicom() {
-    delete[] data;
+    delete[] volume.data;
 }
 
 int Dicom::LoadDicomStack(const string& folder, float3* size) {
@@ -63,11 +64,11 @@ int Dicom::LoadDicomStack(const string& folder, float3* size) {
             return a.location < b.location;
             });
 
-    width = images[0].image->getWidth();
-    height = images[0].image->getHeight();
-    depth = (uint32_t)images.size();
+    volume.width = images[0].image->getWidth();
+    volume.height = images[0].image->getHeight();
+    volume.depth = (uint32_t)images.size();
 
-    if (width == 0 || height == 0) return -1;
+    if (volume.width == 0 || volume.height == 0) return -1;
 
     // volume size in meters
     if (size) {
@@ -77,20 +78,21 @@ int Dicom::LoadDicomStack(const string& folder, float3* size) {
             b.y = (float)fmax(i.location + i.spacing.z * .5, b.y);
         }
 
-        *size = float3(.001 * double3(maxSpacing.xy * double2(width, height), b.y - b.x));
+        *size = float3(.001 * double3(maxSpacing.xy * double2(volume.width, volume.height), b.y - b.x));
+        volume.size = *size;
         printf("%fm x %fm x %fm\n", size->x, size->y, size->z);
     }
 
-    if (data != nullptr) {
-        delete[] data;
+    if (volume.data != nullptr) {
+        delete[] volume.data;
     }
 
-    data = new uint16_t[width * height * depth];
-    memset(data, 0, width * height * depth * sizeof(uint16_t));
+    volume.data = new uint16_t[volume.width * volume.height * volume.depth];
+    memset(volume.data, 0, volume.width * volume.height * volume.depth * sizeof(uint16_t));
     for (uint32_t i = 0; i < images.size(); i++) {
         images[i].image->setMinMaxWindow();
         uint16_t* pixels = (uint16_t*)images[i].image->getOutputData(16);
-        memcpy(data + i * width * height, pixels, width * height * sizeof(uint16_t));
+        memcpy(volume.data + i * volume.width * volume.height, pixels, volume.width * volume.height * sizeof(uint16_t));
     }
 
     for (auto& i : images) delete i.image;
