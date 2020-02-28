@@ -3,7 +3,8 @@
 
 #include "math.hpp"
 
-struct DisneyMaterial {
+class DisneyMaterial {
+public:
     float3 BaseColor;
     float Metallic;
     float3 Emission;
@@ -19,39 +20,23 @@ struct DisneyMaterial {
     float Transmission;
     uint32_t pad[3];
 
-    DisneyMaterial() : pad {0} {
-        BaseColor = float3(0);
-        Metallic = 0.f;
-        Emission = float3(0);
-        Specular = 0.f;
-        Anisotropy = 0.f;
-        Roughness = 0.f;
-        SpecularTint = 0.f;
-        SheenTint = 0.f;
-        Sheen = 0.f;
-        ClearcoatGloss = 0.f;
-        Clearcoat = 0.f;
-        Transmission = 1.f;
-    }
+    DisneyMaterial();
 
-    static DisneyMaterial disney_lerp(DisneyMaterial l, DisneyMaterial r, float t) {
-        DisneyMaterial mixed;
-        mixed.BaseColor = lerp(l.BaseColor, r.BaseColor, t);
-        mixed.Metallic = lerp(l.Metallic, r.Metallic, t);
-        mixed.Emission = lerp(l.Emission, r.Emission, t);
-        mixed.Specular = lerp(l.Specular, r.Specular, t);
-        mixed.Anisotropy = lerp(l.Anisotropy, r.Anisotropy, t);
-        mixed.Roughness = lerp(l.Roughness, r.Roughness, t);
-        mixed.SpecularTint = lerp(l.SpecularTint, r.SpecularTint, t);
-        mixed.SheenTint = lerp(l.SheenTint, r.SheenTint, t);
-        mixed.Sheen = lerp(l.Sheen, r.Sheen, t);
-        mixed.ClearcoatGloss = lerp(l.ClearcoatGloss, r.ClearcoatGloss, t);
-        mixed.Clearcoat = lerp(l.Clearcoat, r.Clearcoat, t);
-        mixed.Subsurface = lerp(l.Subsurface, r.Subsurface, t);
-        mixed.Transmission = lerp(l.Transmission, r.Transmission, t);
+    static DisneyMaterial disney_lerp(DisneyMaterial l, DisneyMaterial r, float t);
 
-        return mixed;
-    }
+    float GetPdf(float3 wi, float3 wo);
+    float3 Evaluate(float3 wi, float3 wo);
+    float3 Sample(float3 wi, float2 sample, float3& wo, float& pdf);
+
+private:
+    float SchlickFresnelReflectance(float u);
+    float GTR1(float ndoth, float a);
+    float GTR2(float ndoth, float a);
+    float GTR2_Aniso(float ndoth, float hdotx, float hdoty, float ax, float ay);
+    float SmithGGX_G(float ndotv, float a);
+    float SmithGGX_G_Aniso(float ndotv, float vdotx, float vdoty, float ax, float ay);
+    float3 Sample_MapToHemisphere(float2 sample, float3 n, float e);
+    float3 GetOrthoVector(float3 n);
 };
 
 #endif

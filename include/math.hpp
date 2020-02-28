@@ -30,6 +30,7 @@
 #endif
 
 #define PI 3.1415926535897932384626433832795f
+#define INV_PI 0.318309886183790671538f
 
 #define rpt2(i) for (int i = 0; i < 2; ++i)
 #define rpt3(i) for (int i = 0; i < 3; ++i)

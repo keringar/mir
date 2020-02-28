@@ -24,17 +24,19 @@ struct ScatterEvent {
     bool valid;
     uint16_t sample;
     float3 position;
+    float3 gradient;
+    float3 tangent;
     DisneyMaterial mat;
 };
 
-ScatterEvent sample_single_ray(const Ray ray, Rng& rng, Volume v, PLF& plf) {
+ScatterEvent SampleVolume(const Ray ray, Rng& rng, Volume v, PLF& plf) {
     ScatterEvent result = { 0 };
 
     // Woodcock (Delta-Tracking?) scattering calculation
     // TODO: Play around with step size, the 0.01 is an arbitrary max step size
     float s = 0.f;
     while (true) {
-        s += (-log(1.f - rng.generate()) / 1.0f) * 0.01;
+        s += (-log(1.f - rng.generate()) / 1.0f) * 0.01f;
         
         float3 current_point = ray.origin + (s * ray.direction);
         if (current_point.z > v.size.z / 2.f) {
@@ -49,6 +51,8 @@ ScatterEvent sample_single_ray(const Ray ray, Rng& rng, Volume v, PLF& plf) {
             result.sample = sample;
             result.position = current_point;
             result.mat = mat;
+            result.gradient = v.gradient_at(current_point);
+            result.tangent = v.tangent_at(current_point);
             break;
         }
     }
@@ -56,8 +60,37 @@ ScatterEvent sample_single_ray(const Ray ray, Rng& rng, Volume v, PLF& plf) {
     return result;
 }
 
-float3 sample_light(const ScatterEvent scatter) {
-    return scatter.mat.BaseColor;
+float3 trace_ray(const float3 eye, float3 target, Rng& rng, Volume& volume, PLF plf) {
+    // Generate ray
+    const float3 direction = normalize(target - eye);
+    Ray ray = { direction, eye };
+
+    // Scene intersection
+    ScatterEvent hit = SampleVolume(ray, rng, volume, plf);
+    if (!hit.valid) {
+        return 0;
+    }
+
+    float3 normal = hit.gradient;
+    float3 tangent = hit.tangent;
+    float3 bitangent = cross(normal, tangent);
+    
+    float3 wi = -ray.direction;
+    float3 wi_t = float3(tangent.x * wi.x + normal.x * wi.x + bitangent.x * wi.x,
+                         tangent.y * wi.y + normal.y * wi.y + bitangent.y * wi.y,
+                         tangent.z * wi.z + normal.z * wi.z + bitangent.z * wi.z);
+    float3 outgoing_angle;
+    float probability;
+    float3 brdf = hit.mat.Sample(wi_t, float2(rng.generate(), rng.generate()), outgoing_angle, probability);
+
+    float throughput = 1.f;
+    if (hit.mat.Emission.x > 0 || hit.mat.Emission.y > 0 || hit.mat.Emission.z > 0) {
+        return throughput * hit.mat.Emission; // * weight;
+    }
+
+    float3 radiance = 0.f;
+
+    return throughput; // + lights;
 }
 
 PLF get_transfer_function() {
@@ -65,10 +98,18 @@ PLF get_transfer_function() {
     air.Transmission = 1.0f;
 
     DisneyMaterial tissue;
-    tissue.BaseColor = float3(0.6, 0.1, 0.1);
-    tissue.Transmission = 0.f;
+    tissue.BaseColor = float3(0.6f, 0.1f, 0.1f);
+    tissue.Transmission = 0.2f;
+
+    DisneyMaterial bone;
+    bone.BaseColor = float3(1.0, 1.0, 1.0);
+    bone.Transmission = 0.f;
 
     PLF plf(air, tissue);
+    plf.add_material(6000, air);
+    plf.add_material(6001, bone);
+    plf.add_material(7000, bone);
+    plf.add_material(7001, tissue);
 
     return plf;
 }
@@ -104,23 +145,15 @@ int main(int argc, char** argv) {
     float3* image = new float3[OUTPUT_WIDTH * OUTPUT_HEIGHT];
     for (uint32_t x = 0; x < OUTPUT_WIDTH; x++) {
         for (uint32_t y = 0; y < OUTPUT_HEIGHT; y++) {
-            // Generate ray directions
             const float3 eye = float3(0.f, 0.f, -1.f);
             const float target_x = ((2.f * (float)x / (float)OUTPUT_WIDTH) - 1.f);
             const float target_y = ((2.f * (float)y / (float)OUTPUT_HEIGHT) - 1.f);
             const float3 target = float3(target_x, target_y, eye.z + 4.0f);
-            const float3 direction = normalize(target - eye);
-            Ray ray = { direction, eye };
 
-            float3 sampled_color = float3(0.f, 0.f, 0.f);
-            ScatterEvent scatter = sample_single_ray(ray, rng, d.volume, plf);
-            
-            if (scatter.valid) {
-                sampled_color = sample_light(scatter);
-            }
+            float3 hdr_color = trace_ray(eye, target, rng, d.volume, plf);
 
-            float3 ldr = tonemap_aces(sampled_color);
-            image[x + (y * OUTPUT_HEIGHT)] = pow(ldr, 2.2);
+            float3 ldr = tonemap_aces(hdr_color);
+            image[x + (y * OUTPUT_HEIGHT)] = pow(ldr, 2.2f);
         }
     }
 

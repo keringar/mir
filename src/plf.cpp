@@ -25,8 +25,8 @@ void PLF::add_material(uint16_t value, DisneyMaterial node) {
 }
 
 DisneyMaterial PLF::get_material_for(uint16_t sample) {
-    int upper_i = nodes.size() - 1;
-    for (int i = 0; i < nodes.size() - 1; i++) {
+    size_t upper_i = nodes.size() - 1;
+    for (size_t i = 0; i < nodes.size() - 1; i++) {
         uint16_t value = std::get<0>(nodes[i]);
         if (value == sample) {
             return std::get<1>(nodes[i]);
