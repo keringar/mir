@@ -7,7 +7,11 @@ set(CMAKE_CXX_STANDARD_REQUIRED True)
 
 include_directories("include/")
 
-add_executable(mir "src/main.cpp" "src/Dicom.cpp")
+add_executable(mir 
+    "src/main.cpp" 
+    "src/Dicom.cpp"
+    "src/plf.cpp"
+    "src/rng.cpp")
 set_property(TARGET mir PROPERTY CXX_STANDARD 17)
 
 if (WIN32)

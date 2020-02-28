@@ -1,34 +1,19 @@
 #include "Dicom.hpp"
 #include "math.hpp"
+#include "disney.h"
+#include "rng.h"
+#include "plf.h"
 
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "stb_image_write.h"
 
 #include <iostream>
-#include <random>
 #include <cmath>
 
 using namespace std;
 
 #define OUTPUT_WIDTH 1024
 #define OUTPUT_HEIGHT 1024
-
-struct DisneyMaterial {
-    float3 BaseColor;
-    float Metallic;
-    float3 Emission;
-    float Specular;
-    float Anisotropy;
-    float Roughness;
-    float SpecularTint;
-    float SheenTint;
-    float Sheen;
-    float ClearcoatGloss;
-    float Clearcoat;
-    float Subsurface;
-    float Transmission;
-    uint32_t pad[3];
-};
 
 struct Ray {
     float3 direction;
@@ -42,27 +27,14 @@ struct ScatterEvent {
     DisneyMaterial mat;
 };
 
-DisneyMaterial sample_to_material(uint16_t sample) {
-    DisneyMaterial mat = { 0 };
-    if (sample > 10000) {
-        mat.BaseColor = float3(0.6, 0.1, 0.1);
-        mat.Transmission = 0.0f;
-    } else {
-        // air
-        mat.Transmission = 1.0f;
-    }
-
-    return mat;
-}
-
-ScatterEvent sample_single_ray(const Ray ray, mt19937& rng, std::uniform_real_distribution<>& dis, Volume v) {
+ScatterEvent sample_single_ray(const Ray ray, Rng& rng, Volume v, PLF& plf) {
     ScatterEvent result = { 0 };
 
     // Woodcock (Delta-Tracking?) scattering calculation
     // TODO: Play around with step size, the 0.01 is an arbitrary max step size
     float s = 0.f;
     while (true) {
-        s += (-log(1.f - dis(rng)) / 1.0f) * 0.01;
+        s += (-log(1.f - rng.generate()) / 1.0f) * 0.01;
         
         float3 current_point = ray.origin + (s * ray.direction);
         if (current_point.z > v.size.z / 2.f) {
@@ -71,8 +43,8 @@ ScatterEvent sample_single_ray(const Ray ray, mt19937& rng, std::uniform_real_di
         }
 
         uint16_t sample = v.sample_at(current_point);
-        DisneyMaterial mat = sample_to_material(sample);
-        if (dis(rng) < 1.f -  (mat.Transmission / 1.0f)) {
+        DisneyMaterial mat = plf.get_material_for(sample);
+        if (rng.generate() < 1.f -  (mat.Transmission / 1.0f)) {
             result.valid = true;
             result.sample = sample;
             result.position = current_point;
@@ -82,50 +54,23 @@ ScatterEvent sample_single_ray(const Ray ray, mt19937& rng, std::uniform_real_di
     }
 
     return result;
-
-    /*
-    while (true) {
-        float opaci
-
-        s += -log(1.f - dis(rng)) / MAX_EXTINCTION;
-
-        current_point = ray.origin + (s * ray.direction);
-        uint16_t sample = v.sample_at(current_point);
-        float opacity = sample_to_material(sample).Opacity;
-        if (dis(rng) < (opacity / MAX_EXTINCTION)) {
-            break;
-        }
-    }*/
-
-    /*
-    float3 current_point = ray.origin;
-    float s = 0.f;
-    for (int i = 0; i < 100; i++) {
-        s += 0.01f;
-        current_point = ray.origin + (ray.direction * s);
-
-        uint16_t sample = v.sample_at(current_point);
-        if (sample > 0) {
-            break;
-        }
-    }
-
-    // Sample scatter position
-    uint16_t sample = v.sample_at(current_point);
-
-    // Scatter
-    ScatterEvent result = { 0 };
-    result.valid = sample != 0;
-    result.sample = sample;
-    result.position = current_point;
-    result.mat = sample_to_material(sample);
-
-    return result;
-    */
 }
 
 float3 sample_light(const ScatterEvent scatter) {
     return scatter.mat.BaseColor;
+}
+
+PLF get_transfer_function() {
+    DisneyMaterial air;
+    air.Transmission = 1.0f;
+
+    DisneyMaterial tissue;
+    tissue.BaseColor = float3(0.6, 0.1, 0.1);
+    tissue.Transmission = 0.f;
+
+    PLF plf(air, tissue);
+
+    return plf;
 }
 
 float3 tonemap_aces(float3 hdr_color) {
@@ -152,9 +97,8 @@ int main(int argc, char** argv) {
         cout << "Successfully loaded DCM stack" << endl;
     }
 
-    std::random_device rd;
-    mt19937 rng(rd());
-    std::uniform_real_distribution<> dis;
+    Rng rng;
+    PLF plf = get_transfer_function();
 
     cout << "Raytracing " << OUTPUT_WIDTH << "x" << OUTPUT_HEIGHT << " image" << endl;
     float3* image = new float3[OUTPUT_WIDTH * OUTPUT_HEIGHT];
@@ -169,7 +113,7 @@ int main(int argc, char** argv) {
             Ray ray = { direction, eye };
 
             float3 sampled_color = float3(0.f, 0.f, 0.f);
-            ScatterEvent scatter = sample_single_ray(ray, rng, dis, d.volume);
+            ScatterEvent scatter = sample_single_ray(ray, rng, d.volume, plf);
             
             if (scatter.valid) {
                 sampled_color = sample_light(scatter);
