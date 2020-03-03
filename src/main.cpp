@@ -12,8 +12,10 @@
 
 using namespace std;
 
-#define OUTPUT_WIDTH 128
-#define OUTPUT_HEIGHT 128
+#define OUTPUT_WIDTH 1024
+#define OUTPUT_HEIGHT 1024
+#define NUM_BOUNCES 16
+#define SAMPLES_PER_PIXEL 1000
 
 struct Ray {
     float3 direction;
@@ -33,11 +35,19 @@ struct ScatterEvent {
 ScatterEvent SampleVolume(const Ray ray, Rng& rng, Volume v, PLF& plf) {
     ScatterEvent result = { 0 };
     result.valid = false;
+    result.distance = 0.f;
 
-    for (int i = 0; i < 100; i++) {
-        result.distance += 0.01f;
-        
+    while (result.distance < 5.f) {
+        // TODO: Make this distance tracking better
+        result.distance += clamp(-log(1.f - rng.generate()) / 1.0f, 0.f, 5.f) * 0.01f;
+
+        // Check if out of bounds
         float3 current_point = ray.origin + ray.direction * result.distance;
+        if (abs(current_point.x) > 5.f || abs(current_point.y) > 5.f || abs(current_point.z) > 5.f) {
+            break;
+        }
+
+        // Check if we hit something
         if (abs(dot(current_point, current_point)) <= 0.05f) {
             result.valid = true;
             result.position = current_point;
@@ -45,168 +55,95 @@ ScatterEvent SampleVolume(const Ray ray, Rng& rng, Volume v, PLF& plf) {
             result.mat = plf.get_material_for(result.sample);
             result.gradient = normalize(current_point);
             result.tangent = normalize(float3(result.gradient.z, result.gradient.z, -result.gradient.x - result.gradient.y));
-            
+
             break;
         }
     }
 
     return result;
-
-
-    /*
-
-    ScatterEvent result = { 0 };
-    result.valid = false;
-
-    // Woodcock (Delta-Tracking?) scattering calculation
-    // TODO: Play around with step size, the 0.01 is an arbitrary max step size
-    float s = 0.f;
-    while (s < 1000) {
-        s += clamp(-log(1.f - rng.generate()) / 1.0f, 0.f, 5.f) * 0.01f;
-        
-        float3 current_point = ray.origin + (s * ray.direction);
-        if (abs(current_point.x) > MAX_BOUNDS || abs(current_point.y) > MAX_BOUNDS || abs(current_point.z) > MAX_BOUNDS) {
-            break;
-        }
-
-        uint16_t sample = v.sample_at(current_point);
-        DisneyMaterial mat = plf.get_material_for(sample);
-        if (rng.generate() < 1.f - (mat.Transmission / 1.0f)) {
-            result.valid = true;
-            result.sample = sample;
-            result.position = current_point;
-            result.mat = mat;
-            result.gradient = v.gradient_at(current_point);
-            result.tangent = v.tangent_at(current_point);
-            break;
-        }
-    }
-
-    result.distance = s;
-    return result;
-    */
 }
 
-float BalanceHeuristic(int nf, float fpdf, int ng, float gpdf) {
-    float f = nf * fpdf;
-    float g = ng * gpdf;
-    return f / (f + g);
-}
-
-float3 sampleAreaLight(float2 sample, float3 p, float3 n, float3& wo, float& pdf) {
-    float3 light_pos = float3((sample.x * 1.f) - 2.f, -2.f, (sample.y * 1.f) - 2.f);
-    float3 light_normal = float3(0.f, -1.f, 0.f);
-    float3 light_tangent = normalize(float3(light_normal.z, light_normal.z, -light_normal.x - light_normal.y));
-    float3 light_bitangent = normalize(cross(light_tangent, light_normal));
-
-    float sinThetaMax2 = light.radius * light.radius / distanceSq(light.position, interaction.point);
-    float cosThetaMax = sqrt(max(EPSILON, 1. - sinThetaMax2));
-    wi = uniformSampleCone(u, cosThetaMax, tangent, binormal, lightDir);
-
-    if (dot(wi, n) > 0.) {
-        pdf = 1.f / (2.f * PI * (1.f - cosThetaMax));
-    }
-
-    return light.L;
-
-    /*
-    // TODO: add more lights
-    // TODO: figure out why the lighting coords are flipped over the x-z plane
-    float3 light_pos = float3((sample.x * 1.f) - 2.f, -2.f, (sample.y * 1.f) - 2.f);
-    float3 light_normal = float3(0.f, -1.f, 0.f);
-
-    wo = light_pos - p;
-    float nv = dot(n, normalize(wo));
-    if (nv <= 0) {
-        pdf = 0;
-        return 0;
-    }
-
-    float3 ke = 1.0f; // TODO: Replace with light material emission
-
-    float d2 = dot(wo, wo);
-    float d = (nv * 0.5f * light_normal).x; // TODO: why do we only consider the first component?
-    pdf = d > 0 ? d2 / d : 0;
-    return d2 > 0 ? ke * nv / d2 : 0;
-    */
-}
-
-float3 shade_surface(Ray& ray, Rng& rng, ScatterEvent& hit, float3& throughput, Volume& volume, PLF& plf) {
-    // Tangent space basis vectors
-    float3 normal = hit.gradient;
-    float3 tangent = hit.tangent;
-    float3 bitangent = cross(normal, tangent);
-    
-    // Evaluate the BRDF
-    float3 wo;
-    float probability;
-    float3 wi = -ray.direction;
-    float3 wi_t = float3(tangent.x * wi.x + tangent.y * wi.y + tangent.z * wi.z,
-                         normal.x * wi.x + normal.y * wi.y + normal.z * wi.z,
-                         bitangent.x * wi.x + bitangent.y * wi.y + bitangent.z * wi.z);
-    float3 brdf = hit.mat.Sample(wi_t, float2(rng.generate(), rng.generate()), wo, probability);
-
-    // If material is an emitter, then it's light source and we can stop bouncing
-    if (hit.mat.Emission.x > 0 || hit.mat.Emission.y > 0 || hit.mat.Emission.z > 0) {
-        float denom = (abs(dot(normal, wi)) * 0.5f * normal).x; // TODO: why do we only consider the first component?
-        float bxdflightpdf = denom > 0 ? (hit.distance * hit.distance / (denom * 1)) : 0;
-        float weight = BalanceHeuristic(1, probability, 1, bxdflightpdf);
-
-        float3 radiance = throughput * hit.mat.Emission * weight;
-        throughput = 0.f;
-        return radiance;
-    }
-
+float3 SampleLights(float3 wi_t, float3 p, float3 n, DisneyMaterial material) {
     float3 radiance = 0.f;
-    // Send a ray to a random light in the scene (handle direct lighting)
-    if (true) {
-        float lightpdf;
-        float3 lwo;
-        float3 le = sampleAreaLight(float2(rng.generate(), rng.generate()), hit.position, normal, lwo, lightpdf);
 
-        float light_dist = sqrt(abs(dot(lwo, lwo)));
+    // Sample every light in the scene
+    for (size_t i = 0; i < 1; i++) {
+        // Just one simple point light for now
+        // TODO: Figure out why light position is flipped over the x-z plane
+        const float3 LIGHT_POS = float3(1.0, -1.0, 1.0);
+        float3 wo = normalize(LIGHT_POS - p);
 
-        Ray light_ray;
-        light_ray.origin = hit.position;
-        light_ray.direction = normalize(lwo);
+        // Tangent space basis vectors
+        float3 normal = n;
+        float3 tangent = normalize(float3(normal.z, normal.z, -normal.x - normal.y));
+        float3 bitangent = cross(tangent, normal);
+
+        // Convert outgoing angle to tangent space
+        float3 wo_t = float3(tangent.x * wo.x + tangent.y * wo.y + tangent.z * wo.z,
+            normal.x * wo.x + normal.y * wo.y + normal.z * wo.z,
+            bitangent.x * wo.x + bitangent.y * wo.y + bitangent.z * wo.z);
         
-        ScatterEvent light_hit = SampleVolume(light_ray, rng, volume, plf);
-        if (!light_hit.valid || light_hit.distance >= light_dist) {
-            float weight = BalanceHeuristic(1, probability, 1, lightpdf);
-            lwo = normalize(lwo);
-            float nwo = abs(dot(lwo, normal));
-            float3 material_eval = hit.mat.Evaluate(wi, lwo);
-            radiance = le * nwo * material_eval * throughput * weight;
-        }
+        // Multiply light contribution by light emissive color
+        radiance += material.Evaluate(wi_t, wo_t) * float3(1.f);
     }
 
-    // Next bounce (for additional indirect lighting)
-    ray.origin = hit.position;
-    ray.direction = normalize(float3(tangent.x * wo.x + normal.x * wo.y + bitangent.x * wo.z,
-                                     tangent.y * wo.x + normal.y * wo.y + bitangent.y * wo.z,
-                                     tangent.z * wo.x + normal.z * wo.y + bitangent.z * wo.z));
-
-    // Keep track of the evalulated materials we've hit so far
-    throughput *= abs(dot(normal, ray.direction)) * brdf / probability;
-
-    // If we didn't hit a light, radiance is zero. Otherwise, returns the radiance from the light
-    return clamp(radiance, 0, 3);
+    return radiance;
 }
 
 float3 trace_ray(Ray ray, Rng& rng, Volume volume, PLF plf) {
-    // Scene intersection one
-    float3 primary;
-    for (int i = 0; i < 16; i++) {
-        float3 throughput = float3(1.f);
+    // TODO: handle intersecting the actual light itself. Right now, all lights
+    // will show up as black if the ray intersected it.
 
+    float3 color;
+    float3 throughput = float3(1.f);
+
+    for (int i = 0; i < NUM_BOUNCES; i++) {
         ScatterEvent hit = SampleVolume(ray, rng, volume, plf);
-        if (hit.valid) {
-            primary += shade_surface(ray, rng, hit, throughput, volume, plf);
+
+        // The ray missed
+        if (!hit.valid) {
+            color += throughput * float3(0.f); // add background color
+            break;
         }
+
+        DisneyMaterial material = hit.mat;
+        
+        // Check if material is emissive
+        if (material.Emission.r > 0 || material.Emission.g > 0 || material.Emission.b > 0) {
+            color += throughput * material.Emission;
+        }
+
+        // Tangent space basis vectors
+        float3 normal = hit.gradient;
+        float3 tangent = hit.tangent;
+        float3 bitangent = cross(tangent, normal);
+
+        // Sample the material BSDF
+        float3 wo_t;
+        float pdf;
+        float3 wi = -ray.direction;
+        float3 wi_t = float3(tangent.x * wi.x + tangent.y * wi.y + tangent.z * wi.z, // Convert normal to tangent space
+                             normal.x * wi.x + normal.y * wi.y + normal.z * wi.z,
+                             bitangent.x * wi.x + bitangent.y * wi.y + bitangent.z * wi.z);
+        float3 brdf = material.Sample(wi_t, float2(rng.generate(), rng.generate()), wo_t, pdf);
+
+        // Calculate direct lighting
+        color += throughput * SampleLights(wi_t, hit.position, hit.gradient, hit.mat);
+
+        // Accumulate the weighted brdf
+        throughput *= material.Evaluate(wi_t, wo_t) / pdf;
+
+        // Convert output direction back to world coords
+        float3 wo = float3(tangent.x * wo_t.x + normal.x * wo_t.y + bitangent.x * wo_t.z,
+                           tangent.y * wo_t.x + normal.y * wo_t.y + bitangent.y * wo_t.z,
+                           tangent.z * wo_t.x + normal.z * wo_t.y + bitangent.z * wo_t.z);
+    
+        // Find the next bounce direction
+        ray.origin = hit.position;
+        ray.direction = normalize(wo);
     }
 
-    // TODO: secondary rays
-    return primary;
+    return color;
 }
 
 PLF get_transfer_function() {
@@ -281,7 +218,10 @@ int main(int argc, char** argv) {
 
             cout << "\rTracing ray " << x + OUTPUT_WIDTH * y << " of " << OUTPUT_WIDTH * OUTPUT_HEIGHT << flush;
             float3 hdr_color = 0;
-            hdr_color = trace_ray(ray, rng, d.volume, plf);
+            for (size_t i = 0; i < SAMPLES_PER_PIXEL; i++) {
+                hdr_color = trace_ray(ray, rng, d.volume, plf);
+            }
+            hdr_color /= (float)SAMPLES_PER_PIXEL;
 
             float3 ldr = tonemap_aces(hdr_color);
             image[x + (y * OUTPUT_HEIGHT)] = pow(ldr, 2.2f);
