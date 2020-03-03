@@ -18,10 +18,10 @@ struct Volume {
                     world_pos += size / 2.f;
 
                     // Calculate sample point from world_pos
-                    uint32_t index_x = (uint32_t)(width * (world_pos.x / size.x));
-                    uint32_t index_y = (uint32_t)(height * (world_pos.y / size.y));
-                    uint32_t index_z = (uint32_t)(depth * (world_pos.z / size.z));
-                    return data[index_x + (index_y * width) + (index_z * width * height)];
+                    uint32_t index_x = min((uint32_t)(width * (world_pos.x / size.x)), width);
+                    uint32_t index_y = min((uint32_t)(height * (world_pos.y / size.y)), height);
+                    uint32_t index_z = min((uint32_t)(depth * (world_pos.z / size.z)), depth);
+                    return data[index_x + width * (index_y + depth * index_z)];
                 }
             }
         }

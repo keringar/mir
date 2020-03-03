@@ -1,4 +1,5 @@
 #include "disney.h"
+#include <iostream>
 
 DisneyMaterial::DisneyMaterial() : pad{ 0 } {
     BaseColor = float3(0);
@@ -12,6 +13,7 @@ DisneyMaterial::DisneyMaterial() : pad{ 0 } {
     Sheen = 0.f;
     ClearcoatGloss = 0.f;
     Clearcoat = 0.f;
+    Subsurface = 0.f;
     Transmission = 1.f;
 }
 
@@ -116,7 +118,7 @@ float3 DisneyMaterial::Evaluate(float3 wi, float3 wo) {
     float fr = lerp(0.04f, 1.f, fh);
     float gr = SmithGGX_G(ndotwo, 0.25) * SmithGGX_G(ndotwi, 0.25);
 
-    return ((1 / PI) * lerp(fd, ss, this->Subsurface) * cd_lin + f_sheen) * (1 - this->Metallic) + gs * fs * ds + this->Clearcoat * gr * fr * dr;
+    return (INV_PI * lerp(fd, ss, this->Subsurface) * cd_lin + f_sheen) * (1 - this->Metallic) + gs * fs * ds + this->Clearcoat * gr * fr * dr;
 }
 
 float3 DisneyMaterial::Sample(float3 wi, float2 sample, float3& wo, float& pdf) {
@@ -194,12 +196,11 @@ float DisneyMaterial::GTR2(float ndoth, float a) {
 }
 
 float DisneyMaterial::GTR2_Aniso(float ndoth, float hdotx, float hdoty, float ax, float ay) {
-    float hdotxa2 = (hdotx / ax);
-    hdotxa2 *= hdotxa2;
-    float hdotya2 = (hdoty / ay);
-    hdotya2 *= hdotya2;
-    float denom = hdotxa2 + hdotya2 + ndoth * ndoth;
-    return denom > 1e-5 ? (1.f / (PI * ax * ay * denom * denom)) : 0.f;
+    float hdotxax2 = powf(hdotx / ax, 2);
+    float hdotyay2 = powf(hdoty / ay, 2);
+    float squares = powf(hdotxax2 + hdotyay2 + ndoth * ndoth, 2);
+
+    return 1.f / (PI * ax * ay * squares);
 }
 
 float DisneyMaterial::SmithGGX_G(float ndotv, float a) {
