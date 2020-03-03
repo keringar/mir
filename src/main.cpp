@@ -14,8 +14,8 @@ using namespace std;
 
 #define OUTPUT_WIDTH 1024
 #define OUTPUT_HEIGHT 1024
-#define NUM_BOUNCES 16
-#define SAMPLES_PER_PIXEL 1000
+#define NUM_BOUNCES 2
+#define SAMPLES_PER_PIXEL 1
 
 struct Ray {
     float3 direction;
@@ -37,23 +37,24 @@ ScatterEvent SampleVolume(const Ray ray, Rng& rng, Volume v, PLF& plf) {
     result.valid = false;
     result.distance = 0.f;
 
-    while (result.distance < 5.f) {
-        // TODO: Make this distance tracking better
-        result.distance += clamp(-log(1.f - rng.generate()) / 1.0f, 0.f, 5.f) * 0.01f;
+    while (result.distance < 2.f) {
+        result.distance += 0.001f;
 
         // Check if out of bounds
         float3 current_point = ray.origin + ray.direction * result.distance;
-        if (abs(current_point.x) > 5.f || abs(current_point.y) > 5.f || abs(current_point.z) > 5.f) {
+        if (abs(current_point.x) > 2.f || abs(current_point.y) > 2.f || abs(current_point.z) > 2.f) {
             break;
         }
 
         // Check if we hit something
-        if (abs(dot(current_point, current_point)) <= 0.05f) {
+        uint32_t sample = v.sample_at(current_point);
+        DisneyMaterial mat = plf.get_material_for(sample);
+        if (mat.Transmission < 1.f) {
             result.valid = true;
             result.position = current_point;
-            result.sample = 100;
-            result.mat = plf.get_material_for(result.sample);
-            result.gradient = normalize(current_point);
+            result.sample = sample;
+            result.mat = mat;
+            result.gradient = v.gradient_at(current_point);
             result.tangent = normalize(float3(result.gradient.z, result.gradient.z, -result.gradient.x - result.gradient.y));
 
             break;
@@ -162,12 +163,29 @@ PLF get_transfer_function() {
     tissue.Sheen = 0.0f;
     tissue.ClearcoatGloss = 0.1f;
     tissue.Clearcoat = 0.1f;
+    tissue.Subsurface = 0.2f;
+    tissue.Transmission = 0.f;
+
+    DisneyMaterial bone;
+    tissue.BaseColor = float3(0.9f, 1.0f, 1.0f);
+    tissue.Metallic = 0.0f;
+    tissue.Emission = float3(0.f);
+    tissue.Specular = 0.1f;
+    tissue.Anisotropy = 0.1f;
+    tissue.Roughness = 0.8f;
+    tissue.SpecularTint = 0.1f;
+    tissue.SheenTint = 0.0f;
+    tissue.Sheen = 0.0f;
+    tissue.ClearcoatGloss = 0.1f;
+    tissue.Clearcoat = 0.1f;
     tissue.Subsurface = 0.0f;
     tissue.Transmission = 0.f;
 
-    PLF plf(air, tissue);
-    plf.add_material(1, air);
-    plf.add_material(2, tissue);
+    PLF plf(air, air);
+    plf.add_material(16380, air);
+    plf.add_material(16383, bone);
+    plf.add_material(34078, bone);
+    plf.add_material(34080, air);
 
     return plf;
 }
