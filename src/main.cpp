@@ -201,10 +201,6 @@ float3 tonemap_aces(float3 hdr_color) {
 }
 
 int main(int argc, char** argv) {
-    argc = 3;
-    argv[1] = "..\\..\\..\\data\\";
-    argv[2] = ".\\out.hdr";
-
     if (argc != 3) {
         cout << "Usage: mir <data folder> <output filename>" << endl;
         return 0;
