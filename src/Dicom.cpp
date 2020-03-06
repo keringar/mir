@@ -1,3 +1,6 @@
+#define STB_IMAGE_IMPLEMENTATION
+#include "stb_image.h"
+
 #include "Dicom.hpp"
 #include "filesystem.hpp"
 
@@ -53,7 +56,7 @@ int Dicom::LoadDicomStack(const string& folder, float3* size) {
         if (p.path().extension().string() == ".dcm") {
             images.push_back(ReadDicomSlice(p.path().string()));
             if (images[images.size() - 1].spacing.x > maxSpacing.x &&
-                images[images.size() - 1].spacing.y > maxSpacing.y) {
+                    images[images.size() - 1].spacing.y > maxSpacing.y) {
                 maxSpacing = images[images.size() - 1].spacing;
             }
         }
@@ -87,12 +90,49 @@ int Dicom::LoadDicomStack(const string& folder, float3* size) {
         delete[] volume.data;
     }
 
+    bool organ_masks = filesystem::exists(std::filesystem::path(folder) / "mask");
+    if (organ_masks) {
+        cout << "Applying organ masks" << endl;
+    }
+
     volume.data = new uint16_t[volume.width * volume.height * volume.depth];
     memset(volume.data, 0, volume.width * volume.height * volume.depth * sizeof(uint16_t));
     for (uint32_t i = 0; i < images.size(); i++) {
         images[i].image->setMinMaxWindow();
         uint16_t* pixels = (uint16_t*)images[i].image->getOutputData(16);
         memcpy(volume.data + i * volume.width * volume.height, pixels, volume.width * volume.height * sizeof(uint16_t));
+
+        if (organ_masks) {
+            std::filesystem::path path(folder);
+            path = path / "mask" / (std::to_string(i) + ".png");
+
+            int x, y, n;
+            stbi_set_flip_vertically_on_load(true);
+            uint8_t* data = stbi_load(path.c_str(), &x, &y, &n, 1);
+            if (data == nullptr) {
+                cerr << "Failed to load mask " << path << endl;
+                cerr << stbi_failure_reason() << endl;
+                return -1;
+            }
+
+            if (x != volume.width || y != volume.height) {
+                cerr << "FATAL: " << i << ".png has an unexpected size/format" << endl;
+                cerr << "x: " << x << " y: " << y << " n: " << n << endl;
+                return -1;
+            }
+
+            for (uint16_t mask_x = 0; mask_x < volume.width; mask_x++) {
+                for (uint16_t mask_y = 0; mask_y < volume.height; mask_y++) {
+                    if (data[mask_x + (mask_y * volume.width)] == 0) {
+                        //volume.data[mask_x + volume.width * (mask_y + volume.depth * i)] = 0;
+                    }
+                }
+            }
+        }
+    }
+
+    if (organ_masks) {
+        cout << "Zeroed out all non-masked samples" << endl;
     }
 
     for (auto& i : images) delete i.image;

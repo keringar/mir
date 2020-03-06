@@ -3,6 +3,7 @@
 #include "disney.h"
 #include "rng.h"
 #include "plf.h"
+#include "filesystem.hpp"
 
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "stb_image_write.h"
@@ -49,7 +50,7 @@ ScatterEvent SampleVolume(const Ray ray, Rng& rng, Volume v, PLF& plf) {
         // Check if we hit something
         uint32_t sample = v.sample_at(current_point);
         DisneyMaterial mat = plf.get_material_for(sample);
-        if (mat.Transmission < 1.f) {
+        if (sample) {
             result.valid = true;
             result.position = current_point;
             result.sample = sample;
@@ -167,25 +168,24 @@ PLF get_transfer_function() {
     tissue.Transmission = 0.f;
 
     DisneyMaterial bone;
-    tissue.BaseColor = float3(0.9f, 1.0f, 1.0f);
-    tissue.Metallic = 0.0f;
-    tissue.Emission = float3(0.f);
-    tissue.Specular = 0.1f;
-    tissue.Anisotropy = 0.1f;
-    tissue.Roughness = 0.8f;
-    tissue.SpecularTint = 0.1f;
-    tissue.SheenTint = 0.0f;
-    tissue.Sheen = 0.0f;
-    tissue.ClearcoatGloss = 0.1f;
-    tissue.Clearcoat = 0.1f;
-    tissue.Subsurface = 0.0f;
-    tissue.Transmission = 0.f;
+    bone.BaseColor = float3(1.0f, 1.0f, 1.0f);
+    bone.Metallic = 0.0f;
+    bone.Emission = float3(0.f);
+    bone.Specular = 0.1f;
+    bone.Anisotropy = 0.1f;
+    bone.Roughness = 0.8f;
+    bone.SpecularTint = 0.1f;
+    bone.SheenTint = 0.0f;
+    bone.Sheen = 0.0f;
+    bone.ClearcoatGloss = 0.1f;
+    bone.Clearcoat = 0.1f;
+    bone.Subsurface = 0.0f;
+    bone.Transmission = 0.f;
 
     PLF plf(air, air);
-    plf.add_material(16380, air);
-    plf.add_material(16383, bone);
-    plf.add_material(34078, bone);
-    plf.add_material(34080, air);
+    plf.add_material(10000, air);
+    plf.add_material(20000, tissue);
+    plf.add_material(50000, bone);
 
     return plf;
 }
