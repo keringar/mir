@@ -12,7 +12,8 @@ add_executable(mir
     "src/Dicom.cpp"
     "src/plf.cpp"
     "src/rng.cpp"
-    "src/disney.cpp")
+    "src/disney.cpp"
+    "src/Volume.cpp")
 set_property(TARGET mir PROPERTY CXX_STANDARD 17)
 
 if (WIN32)

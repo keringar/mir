@@ -29,22 +29,12 @@ Slice ReadDicomSlice(const string& file) {
     return { new DicomImage(file.c_str()), s, x };
 }
 
-Dicom::Dicom() {
-    volume.data = nullptr;
-    volume.width = 0;
-    volume.height = 0;
-    volume.depth = 0;
-    volume.size = 0;
-}
-
-Dicom::~Dicom() {
-    delete[] volume.data;
-}
-
-int Dicom::LoadDicomStack(const string& folder, float3* size) {
+Volume LoadDicomStack(const string& folder, int& result) {
     if (!filesystem::exists(folder)) {
         printf("Folder does not exist\n");
-        return -1;
+
+        result = -1;
+        return Volume();
     }
 
     double3 maxSpacing = 0;
@@ -58,44 +48,41 @@ int Dicom::LoadDicomStack(const string& folder, float3* size) {
             }
         }
 
-    if (images.empty()) return -1;
+    if (images.empty()) {
+        result = -1;
+        return Volume();
+    }
 
     std::sort(images.begin(), images.end(), [](const Slice& a, const Slice& b) {
             return a.location < b.location;
             });
 
-    volume.width = images[0].image->getWidth();
-    volume.height = images[0].image->getHeight();
-    volume.depth = (uint32_t)images.size();
+    Volume volume(images[0].image->getWidth(), images[0].image->getHeight(), (uint32_t)images.size());
 
-    if (volume.width == 0 || volume.height == 0) return -1;
+    if (volume.width() == 0 || volume.height() == 0) {
+        result = -1;
+        return Volume();
+    }
 
     // volume size in meters
-    if (size) {
-        double2 b = images[0].location;
-        for (auto i : images) {
-            b.x = (float)fmin(i.location - i.spacing.z * .5, b.x);
-            b.y = (float)fmax(i.location + i.spacing.z * .5, b.y);
-        }
-
-        *size = float3(.001 * double3(maxSpacing.xy * double2(volume.width, volume.height), b.y - b.x));
-        volume.size = *size;
-        printf("%fm x %fm x %fm\n", size->x, size->y, size->z);
+    double2 b = images[0].location;
+    for (auto i : images) {
+        b.x = (float)fmin(i.location - i.spacing.z * .5, b.x);
+        b.y = (float)fmax(i.location + i.spacing.z * .5, b.y);
     }
 
-    if (volume.data != nullptr) {
-        delete[] volume.data;
-    }
+    float3 size = float3(.001 * double3(maxSpacing.xy * double2(volume.width(), volume.height()), b.y - b.x));
+    volume.set_size(size);
+    printf("%fm x %fm x %fm\n", size.x, size.y, size.z);
 
-    volume.data = new uint16_t[volume.width * volume.height * volume.depth];
-    memset(volume.data, 0, volume.width * volume.height * volume.depth * sizeof(uint16_t));
     for (uint32_t i = 0; i < images.size(); i++) {
         images[i].image->setMinMaxWindow();
         uint16_t* pixels = (uint16_t*)images[i].image->getOutputData(16);
-        memcpy(volume.data + i * volume.width * volume.height, pixels, volume.width * volume.height * sizeof(uint16_t));
+        memcpy(volume.get_raw_data() + i * volume.width() * volume.height(), pixels, volume.width() * volume.height() * sizeof(uint16_t));
     }
 
     for (auto& i : images) delete i.image;
 
-    return 0;
+    result = 0;
+    return volume;
 }
