@@ -1,12 +1,12 @@
+#define STB_IMAGE_WRITE_IMPLEMENTATION
+#include "stb_image_write.h"
+
 #include "Dicom.hpp"
 #include "math.hpp"
 #include "disney.h"
 #include "rng.h"
 #include "plf.h"
 #include "filesystem.hpp"
-
-#define STB_IMAGE_WRITE_IMPLEMENTATION
-#include "stb_image_write.h"
 
 #include <iostream>
 #include <cmath>
@@ -50,7 +50,7 @@ ScatterEvent SampleVolume(const Ray ray, Rng& rng, Volume v, PLF& plf) {
         // Check if we hit something
         uint32_t sample = v.sample_at(current_point);
         DisneyMaterial mat = plf.get_material_for(sample);
-        if (sample) {
+        if (mat.Transmission < 1.f) {
             result.valid = true;
             result.position = current_point;
             result.sample = sample;
@@ -107,8 +107,6 @@ float3 trace_ray(Ray ray, Rng& rng, Volume volume, PLF plf) {
             color += throughput * float3(0.f); // add background color
             break;
         }
-
-        return hit.sample / 65535.f;
 
         DisneyMaterial material = hit.mat;
         
@@ -185,9 +183,13 @@ PLF get_transfer_function() {
     bone.Transmission = 0.f;
 
     PLF plf(air, air);
-    plf.add_material(10000, air);
-    plf.add_material(20000, tissue);
-    plf.add_material(50000, bone);
+
+    plf.add_material(999, air);
+    plf.add_material(1000, tissue);
+    plf.add_material(1001, air);
+    plf.add_material(1999, air);
+    plf.add_material(2000, bone);
+    plf.add_material(2001, air);
 
     return plf;
 }
@@ -203,6 +205,10 @@ float3 tonemap_aces(float3 hdr_color) {
 }
 
 int main(int argc, char** argv) {
+    argc = 3;
+    argv[1] = "..\\..\\..\\data\\masked-larry\\";
+    argv[2] = ".\\out.hdr";
+
     if (argc != 3) {
         cout << "Usage: mir <data folder> <output filename>" << endl;
         return 0;
@@ -210,7 +216,8 @@ int main(int argc, char** argv) {
 
     float3 size(1.f, 1.f, 1.f);
     Dicom d;
-    if (d.LoadDicomStack(argv[1], &size)) {
+    // Load only the spleen?
+    if (d.LoadDicomStack(argv[1], &size, 2)) {
         cerr << "FATAL: Error loading Dicom stack" << endl;
         return -1;
     } else {
@@ -244,7 +251,7 @@ int main(int argc, char** argv) {
         }
     }
 
-    cout << "\nWriting output image to HDR file: " << argv[2] << endl;
+    cout << "\nWriting output image to file: " << argv[2] << endl;
     stbi_write_hdr(argv[2], OUTPUT_WIDTH, OUTPUT_HEIGHT, 3, (float*)image);
     delete[] image;
 

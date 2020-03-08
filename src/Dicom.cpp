@@ -1,5 +1,8 @@
 #define STB_IMAGE_IMPLEMENTATION
+#define STBI_WINDOWS_UTF8
 #include "stb_image.h"
+
+#include "stb_image_write.h"
 
 #include "Dicom.hpp"
 #include "filesystem.hpp"
@@ -44,7 +47,7 @@ Dicom::~Dicom() {
     delete[] volume.data;
 }
 
-int Dicom::LoadDicomStack(const string& folder, float3* size) {
+int Dicom::LoadDicomStack(const string& folder, float3* size, uint8_t mask_value) {
     if (!filesystem::exists(folder)) {
         printf("Folder does not exist\n");
         return -1;
@@ -100,11 +103,9 @@ int Dicom::LoadDicomStack(const string& folder, float3* size) {
     for (uint32_t i = 0; i < images.size(); i++) {
         images[i].image->setMinMaxWindow();
         uint16_t* pixels = (uint16_t*)images[i].image->getOutputData(16);
-        memcpy(volume.data + i * volume.width * volume.height, pixels, volume.width * volume.height * sizeof(uint16_t));
 
         if (organ_masks) {
-            std::filesystem::path path(folder);
-            path = path / "mask" / (std::to_string(i) + ".png");
+            std::string path = std::string(folder) + "/mask/" + std::to_string(i) + ".png";
 
             int x, y, n;
             stbi_set_flip_vertically_on_load(true);
@@ -121,18 +122,30 @@ int Dicom::LoadDicomStack(const string& folder, float3* size) {
                 return -1;
             }
 
-            bool masked = true;
-            for (uint16_t mask_y = 0; mask_y < volume.height; mask_y++) {
-                for (uint16_t mask_x = 0; mask_x < volume.width; mask_x++) {
-                    size_t index = (mask_x + (mask_y * volume.width));
-                    uint8_t mask = image[index];
+            
+            //uint8_t* test_image = new uint8_t[(size_t)x * (size_t)y];
+            for (size_t mask_y = 0; mask_y < volume.height; mask_y++) {
+                for (size_t mask_x = 0; mask_x < volume.width; mask_x++) {
 
-                    if (mask != 2) {
-                        volume.data[mask_x + mask_y * volume.width + i * volume.width * volume.height] = 0;
+                    size_t index = mask_x + ((size_t)mask_y * volume.width);
+                    size_t mask = (size_t)image[index];
+
+                    // mask out the spleen?
+                    if (mask != mask_value) {
+                        pixels[mask_x + mask_y * images[i].image->getWidth()] = 0;
                     }
+
+                    //test_image[mask_x + mask_y * images[i].image->getWidth()] = (pixels[mask_x + mask_y * images[i].image->getWidth()] / 65535.f) * 255;
                 }
             }
+
+            //stbi_write_png((std::to_string(i) + ".png").c_str(), x, y, 1, test_image, 0);
+            //delete[] test_image;
+
+            stbi_image_free(image);
         }
+
+        memcpy(volume.data + i * volume.width * volume.height, pixels, volume.width * volume.height * sizeof(uint16_t));
     }
 
     if (organ_masks) {
