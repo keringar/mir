@@ -13,8 +13,8 @@
 
 using namespace std;
 
-#define OUTPUT_WIDTH 1024
-#define OUTPUT_HEIGHT 1024
+#define OUTPUT_WIDTH 512
+#define OUTPUT_HEIGHT 512
 #define NUM_BOUNCES 2
 #define SAMPLES_PER_PIXEL 1
 
@@ -107,6 +107,8 @@ float3 trace_ray(Ray ray, Rng& rng, Volume volume, PLF plf) {
             color += throughput * float3(0.f); // add background color
             break;
         }
+
+        return hit.sample / 65535.f;
 
         DisneyMaterial material = hit.mat;
         

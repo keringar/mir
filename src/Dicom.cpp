@@ -108,8 +108,8 @@ int Dicom::LoadDicomStack(const string& folder, float3* size) {
 
             int x, y, n;
             stbi_set_flip_vertically_on_load(true);
-            uint8_t* data = stbi_load(path.c_str(), &x, &y, &n, 1);
-            if (data == nullptr) {
+            unsigned char* image = stbi_load(path.c_str(), &x, &y, &n, 1);
+            if (image == nullptr) {
                 cerr << "Failed to load mask " << path << endl;
                 cerr << stbi_failure_reason() << endl;
                 return -1;
@@ -121,10 +121,14 @@ int Dicom::LoadDicomStack(const string& folder, float3* size) {
                 return -1;
             }
 
-            for (uint16_t mask_x = 0; mask_x < volume.width; mask_x++) {
-                for (uint16_t mask_y = 0; mask_y < volume.height; mask_y++) {
-                    if (data[mask_x + (mask_y * volume.width)] == 0) {
-                        //volume.data[mask_x + volume.width * (mask_y + volume.depth * i)] = 0;
+            bool masked = true;
+            for (uint16_t mask_y = 0; mask_y < volume.height; mask_y++) {
+                for (uint16_t mask_x = 0; mask_x < volume.width; mask_x++) {
+                    size_t index = (mask_x + (mask_y * volume.width));
+                    uint8_t mask = image[index];
+
+                    if (mask != 2) {
+                        volume.data[mask_x + mask_y * volume.width + i * volume.width * volume.height] = 0;
                     }
                 }
             }
