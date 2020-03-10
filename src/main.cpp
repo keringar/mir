@@ -7,6 +7,8 @@
 #include "rng.h"
 #include "plf.h"
 #include "filesystem.hpp"
+#include "camera.h"
+#include "ray.h"
 
 #include <iostream>
 #include <cmath>
@@ -15,13 +17,8 @@ using namespace std;
 
 #define OUTPUT_WIDTH 512
 #define OUTPUT_HEIGHT 512
-#define NUM_BOUNCES 2
+#define NUM_BOUNCES 1
 #define SAMPLES_PER_PIXEL 1
-
-struct Ray {
-    float3 direction;
-    float3 origin;
-};
 
 struct ScatterEvent {
     bool valid;
@@ -38,8 +35,8 @@ ScatterEvent SampleVolume(const Ray ray, Rng& rng, Volume v, PLF& plf) {
     result.valid = false;
     result.distance = 0.f;
 
-    while (result.distance < 4.f) {
-        result.distance += 0.0001f;
+    while (result.distance < 2.f) {
+        result.distance += 0.01f;
 
         // Check if out of bounds
         float3 current_point = ray.origin + ray.direction * result.distance;
@@ -51,7 +48,6 @@ ScatterEvent SampleVolume(const Ray ray, Rng& rng, Volume v, PLF& plf) {
         uint32_t sample = v.sample_at(current_point);
         DisneyMaterial mat = plf.get_material_for(sample);
         if (sample) {
-            cerr << "hit" << endl;
             result.valid = true;
             result.position = current_point;
             result.sample = sample;
@@ -216,7 +212,7 @@ int main(int argc, char** argv) {
     float3 size(1.f, 1.f, 1.f);
     Dicom d;
     // Load only the spleen?
-    if (d.LoadDicomStack(argv[1], &size, 2)) {
+    if (d.LoadDicomStack(argv[1], &size, 1)) {
         cerr << "FATAL: Error loading Dicom stack" << endl;
         return -1;
     } else {
@@ -226,25 +222,23 @@ int main(int argc, char** argv) {
     Rng rng;
     PLF plf = get_transfer_function();
 
+    Camera camera = Camera(float3(0, 0, -2.0f), float3(0, 0, 0), OUTPUT_WIDTH, OUTPUT_HEIGHT);
+
     cout << "Raytracing " << OUTPUT_WIDTH << "x" << OUTPUT_HEIGHT << " image" << endl;
     float3* image = new float3[OUTPUT_WIDTH * OUTPUT_HEIGHT];
     for (uint32_t y = 0; y < OUTPUT_HEIGHT; y++) {
         for (uint32_t x = 0; x < OUTPUT_WIDTH; x++) {
-            // Generate ray
-            const float3 eye = float3(0.f, 0.f, -2.f);
-            const float target_x = ((4.f * (float)x / (float)OUTPUT_WIDTH) - 2.f);
-            const float target_y = ((4.f * (float)y / (float)OUTPUT_HEIGHT) - 2.f);
-            const float3 target = float3(target_x, target_y, eye.z + 4.0f);
-            const float3 direction = normalize(target - eye);
-            Ray ray = { direction, eye };
+            cout << "\rTracing ray " << x + OUTPUT_WIDTH * y << " of " << OUTPUT_WIDTH * OUTPUT_HEIGHT << flush;
 
-            //cout << "\rTracing ray " << x + OUTPUT_WIDTH * y << " of " << OUTPUT_WIDTH * OUTPUT_HEIGHT << flush;
+            // Sample pixel at x,y
             float3 hdr_color = 0;
             for (size_t i = 0; i < SAMPLES_PER_PIXEL; i++) {
+                Ray ray = camera.get_ray(x, y, true, rng);
                 hdr_color = trace_ray(ray, rng, d.volume, plf);
             }
             hdr_color /= (float)SAMPLES_PER_PIXEL;
 
+            // Tonemap and gamma correct
             float3 ldr = tonemap_aces(hdr_color);
             image[x + (y * OUTPUT_HEIGHT)] = pow(ldr, 2.2f);
         }

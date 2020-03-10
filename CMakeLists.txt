@@ -12,13 +12,14 @@ add_executable(mir
     "src/Dicom.cpp"
     "src/plf.cpp"
     "src/rng.cpp"
-    "src/disney.cpp")
+    "src/disney.cpp"
+    "src/camera.cpp")
 set_property(TARGET mir PROPERTY CXX_STANDARD 17)
 
 if (WIN32)
     set(DCMTK_DIR "$ENV{DCMTK_HOME}")
-    set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /MT")
-    set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} /MTd")
+    set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /MD")
+    set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} /MDd")
     target_link_options(mir PUBLIC /INCREMENTAL:NO /NODEFAULTLIB:MSVCRT)
 endif()
 

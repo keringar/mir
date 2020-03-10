@@ -93,18 +93,19 @@ int Dicom::LoadDicomStack(const string& folder, float3* size, uint8_t mask_value
         delete[] volume.data;
     }
 
+    volume.data = new uint16_t[volume.width * volume.height * volume.depth];
+    memset(volume.data, 0, volume.width * volume.height * volume.depth * sizeof(uint16_t));
+
     bool organ_masks = filesystem::exists(std::filesystem::path(folder) / "mask");
     if (organ_masks) {
         cout << "Applying organ masks" << endl;
     }
 
-    volume.data = new uint16_t[volume.width * volume.height * volume.depth];
-    memset(volume.data, 0, volume.width * volume.height * volume.depth * sizeof(uint16_t));
     for (uint32_t i = 0; i < images.size(); i++) {
         images[i].image->setMinMaxWindow();
         uint16_t* pixels = (uint16_t*)images[i].image->getOutputData(16);
 
-        if (organ_masks) {
+        if (false) {
             std::string path = std::string(folder) + "/mask/" + std::to_string(i) + ".png";
 
             int x, y, n;
@@ -123,23 +124,17 @@ int Dicom::LoadDicomStack(const string& folder, float3* size, uint8_t mask_value
             }
 
             
-            //uint8_t* test_image = new uint8_t[(size_t)x * (size_t)y];
             for (size_t mask_y = 0; mask_y < volume.height; mask_y++) {
                 for (size_t mask_x = 0; mask_x < volume.width; mask_x++) {
 
                     size_t index = mask_x + ((size_t)mask_y * volume.width);
                     size_t mask = (size_t)image[index];
 
-                    // mask out the spleen?
                     if (mask != mask_value) {
                         pixels[mask_y + mask_x * images[i].image->getWidth()] = 0;
                     }
-                    //test_image[mask_x + mask_y * images[i].image->getWidth()] = (pixels[mask_x + mask_y * images[i].image->getWidth()] / 65535.f) * 255;
                 }
             }
-
-            //stbi_write_png((std::to_string(i) + ".png").c_str(), x, y, 1, test_image, 0);
-            //delete[] test_image;
 
             stbi_image_free(image);
         }
