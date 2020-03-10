@@ -132,9 +132,8 @@ int Dicom::LoadDicomStack(const string& folder, float3* size, uint8_t mask_value
 
                     // mask out the spleen?
                     if (mask != mask_value) {
-                        pixels[mask_x + mask_y * images[i].image->getWidth()] = 0;
+                        pixels[mask_y + mask_x * images[i].image->getWidth()] = 0;
                     }
-
                     //test_image[mask_x + mask_y * images[i].image->getWidth()] = (pixels[mask_x + mask_y * images[i].image->getWidth()] / 65535.f) * 255;
                 }
             }

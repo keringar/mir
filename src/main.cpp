@@ -38,8 +38,8 @@ ScatterEvent SampleVolume(const Ray ray, Rng& rng, Volume v, PLF& plf) {
     result.valid = false;
     result.distance = 0.f;
 
-    while (result.distance < 2.f) {
-        result.distance += 0.001f;
+    while (result.distance < 4.f) {
+        result.distance += 0.0001f;
 
         // Check if out of bounds
         float3 current_point = ray.origin + ray.direction * result.distance;
@@ -50,7 +50,8 @@ ScatterEvent SampleVolume(const Ray ray, Rng& rng, Volume v, PLF& plf) {
         // Check if we hit something
         uint32_t sample = v.sample_at(current_point);
         DisneyMaterial mat = plf.get_material_for(sample);
-        if (mat.Transmission < 1.f) {
+        if (sample) {
+            cerr << "hit" << endl;
             result.valid = true;
             result.position = current_point;
             result.sample = sample;
@@ -107,6 +108,8 @@ float3 trace_ray(Ray ray, Rng& rng, Volume volume, PLF plf) {
             color += throughput * float3(0.f); // add background color
             break;
         }
+
+        return hit.sample / 65535.f;
 
         DisneyMaterial material = hit.mat;
         
@@ -205,10 +208,6 @@ float3 tonemap_aces(float3 hdr_color) {
 }
 
 int main(int argc, char** argv) {
-    argc = 3;
-    argv[1] = "..\\..\\..\\data\\masked-larry\\";
-    argv[2] = ".\\out.hdr";
-
     if (argc != 3) {
         cout << "Usage: mir <data folder> <output filename>" << endl;
         return 0;
@@ -232,14 +231,14 @@ int main(int argc, char** argv) {
     for (uint32_t y = 0; y < OUTPUT_HEIGHT; y++) {
         for (uint32_t x = 0; x < OUTPUT_WIDTH; x++) {
             // Generate ray
-            const float3 eye = float3(0.f, 0.f, -1.f);
-            const float target_x = ((2.f * (float)x / (float)OUTPUT_WIDTH) - 1.f);
-            const float target_y = ((2.f * (float)y / (float)OUTPUT_HEIGHT) - 1.f);
+            const float3 eye = float3(0.f, 0.f, -2.f);
+            const float target_x = ((4.f * (float)x / (float)OUTPUT_WIDTH) - 2.f);
+            const float target_y = ((4.f * (float)y / (float)OUTPUT_HEIGHT) - 2.f);
             const float3 target = float3(target_x, target_y, eye.z + 4.0f);
             const float3 direction = normalize(target - eye);
             Ray ray = { direction, eye };
 
-            cout << "\rTracing ray " << x + OUTPUT_WIDTH * y << " of " << OUTPUT_WIDTH * OUTPUT_HEIGHT << flush;
+            //cout << "\rTracing ray " << x + OUTPUT_WIDTH * y << " of " << OUTPUT_WIDTH * OUTPUT_HEIGHT << flush;
             float3 hdr_color = 0;
             for (size_t i = 0; i < SAMPLES_PER_PIXEL; i++) {
                 hdr_color = trace_ray(ray, rng, d.volume, plf);
