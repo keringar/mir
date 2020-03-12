@@ -118,7 +118,11 @@ float3 DisneyMaterial::Evaluate(float3 wi, float3 wo) {
     float fr = lerp(0.04f, 1.f, fh);
     float gr = SmithGGX_G(ndotwo, 0.25) * SmithGGX_G(ndotwi, 0.25);
 
-    return (INV_PI * lerp(fd, ss, this->Subsurface) * cd_lin + f_sheen) * (1 - this->Metallic) + gs * fs * ds + this->Clearcoat * gr * fr * dr;
+    float3 ret = (INV_PI * lerp(fd, ss, this->Subsurface) * cd_lin + f_sheen) * (1 - this->Metallic) + gs * fs * ds + this->Clearcoat * gr * fr * dr;
+    if (ret.x > 1 || ret.y > 1 || ret.z > 1) {
+        int q = 1;
+    }
+    return ret;
 }
 
 float3 DisneyMaterial::Sample(float3 wi, float2 sample, float3& wo, float& pdf) {

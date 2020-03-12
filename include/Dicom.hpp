@@ -11,17 +11,16 @@ struct Volume {
     float3 size;
 
     uint16_t sample_at(float3 world_pos) {
-        if (world_pos.x < size.x / 2 && world_pos.x > -size.x / 2) {
-            if (world_pos.y < size.y / 2 && world_pos.y > -size.y / 2) {
-                if (world_pos.z < size.z / 2 && world_pos.z > -size.z / 2) {
-                    // Resize volume to between 0 and size
-                    world_pos += size / 2.f;
+        if (abs(world_pos.x) < size.x / 2) {
+            if (abs(world_pos.y) < size.z / 2) {
+                if (abs(world_pos.z) < size.y / 2) {
+                    world_pos += float3(size.x, size.z, size.y) / 2;
 
-                    // Calculate sample point from world_pos
-                    uint32_t index_x = min((uint32_t)(width * (world_pos.x / size.x)), width);
-                    uint32_t index_y = min((uint32_t)(height * (world_pos.y / size.y)), height);
-                    uint32_t index_z = min((uint32_t)(depth * (world_pos.z / size.z)), depth);
-                    return data[index_x + width * (index_y + depth * index_z)];
+                    uint32_t slice = min(depth * (world_pos.y / size.z), depth - 1);
+                    uint32_t slice_x = width * (world_pos.x / size.x);
+                    uint32_t slice_y = height * (world_pos.z / size.y);
+
+                    return data[slice * width * height + slice_y * width + slice_x];
                 }
             }
         }
@@ -53,9 +52,10 @@ struct Volume {
 class Dicom {
 public:
     Volume volume;
+    uint16_t max_value;
 
     Dicom();
     ~Dicom();
 
-    int LoadDicomStack(const std::string& folder, float3* size, uint8_t mask_value);
+    int LoadDicomStack(const std::string& folder, float3* size, bool should_mask, uint8_t mask_value);
 };

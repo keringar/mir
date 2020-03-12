@@ -15,10 +15,12 @@
 
 using namespace std;
 
-#define OUTPUT_WIDTH 512
-#define OUTPUT_HEIGHT 512
+#define OUTPUT_WIDTH 128
+#define OUTPUT_HEIGHT 128
 #define NUM_BOUNCES 1
-#define SAMPLES_PER_PIXEL 1
+#define SAMPLES_PER_PIXEL 8
+#define MAX_DENSITY 1.f // affects the chance of check for a hit being true
+#define DENSITY_MULTIPLIER 100.f // increases probability of checking for a hit
 
 struct ScatterEvent {
     bool valid;
@@ -35,8 +37,10 @@ ScatterEvent SampleVolume(const Ray ray, Rng& rng, Volume v, PLF& plf) {
     result.valid = false;
     result.distance = 0.f;
 
-    while (result.distance < 2.f) {
-        result.distance += 0.01f;
+    /* Ray Marching */
+    /*
+    while (result.distance < 3.f) {
+        result.distance += 0.001f;
 
         // Check if out of bounds
         float3 current_point = ray.origin + ray.direction * result.distance;
@@ -47,7 +51,7 @@ ScatterEvent SampleVolume(const Ray ray, Rng& rng, Volume v, PLF& plf) {
         // Check if we hit something
         uint32_t sample = v.sample_at(current_point);
         DisneyMaterial mat = plf.get_material_for(sample);
-        if (sample) {
+        if (mat.Transmission < 1.f) { // TODO: handle volumetric scattering
             result.valid = true;
             result.position = current_point;
             result.sample = sample;
@@ -58,19 +62,51 @@ ScatterEvent SampleVolume(const Ray ray, Rng& rng, Volume v, PLF& plf) {
             break;
         }
     }
+    */
+
+    /* Delta tracking for volumetric scattering */
+    while (result.distance < 3.f) {
+        result.distance -= logf(1.f - rng.generate()) / (MAX_DENSITY * DENSITY_MULTIPLIER);
+
+        float3 current_point = ray.origin + ray.direction * result.distance;
+        uint32_t sample = v.sample_at(current_point);
+        DisneyMaterial mat = plf.get_material_for(sample);
+
+        float density = 1.f - mat.Transmission;
+        if ((density / MAX_DENSITY) > rng.generate()) {
+            result.valid = true;
+            result.position = current_point;
+            result.sample = sample;
+            result.mat = mat;
+            result.gradient = v.gradient_at(current_point);
+            result.tangent = normalize(float3(result.gradient.z, result.gradient.z, -result.gradient.x - result.gradient.y));
+            
+            break;
+        }
+    }
 
     return result;
 }
 
-float3 SampleLights(float3 wi_t, float3 p, float3 n, DisneyMaterial material) {
+float3 SampleLights(float3 wi_t, float3 p, float3 n, DisneyMaterial material, Rng& rng, Volume v, PLF& plf) {
     float3 radiance = 0.f;
 
     // Sample every light in the scene
     for (size_t i = 0; i < 1; i++) {
         // Just one simple point light for now
         // TODO: Figure out why light position is flipped over the x-z plane
-        const float3 LIGHT_POS = float3(1.0, -1.0, 1.0);
+        const float3 LIGHT_POS = float3(0.0, -1.0, 0.0);
         float3 wo = normalize(LIGHT_POS - p);
+
+        // Check if light ray is reachable
+        Ray light_ray;
+        light_ray.origin = p;
+        light_ray.direction = wo;
+        ScatterEvent light_hit = SampleVolume(light_ray, rng, v, plf);
+        if (light_hit.distance >= length(LIGHT_POS - p)) {
+            // Sample ray did not reach the light
+            continue;
+        }
 
         // Tangent space basis vectors
         float3 normal = n;
@@ -105,8 +141,6 @@ float3 trace_ray(Ray ray, Rng& rng, Volume volume, PLF plf) {
             break;
         }
 
-        return hit.sample / 65535.f;
-
         DisneyMaterial material = hit.mat;
         
         // Check if material is emissive
@@ -129,7 +163,8 @@ float3 trace_ray(Ray ray, Rng& rng, Volume volume, PLF plf) {
         float3 brdf = material.Sample(wi_t, float2(rng.generate(), rng.generate()), wo_t, pdf);
 
         // Calculate direct lighting
-        color += throughput * SampleLights(wi_t, hit.position, hit.gradient, hit.mat);
+        float3 radiance = SampleLights(wi_t, hit.position, hit.gradient, hit.mat, rng, volume, plf);
+        color += throughput * radiance;
 
         // Accumulate the weighted brdf
         throughput *= material.Evaluate(wi_t, wo_t) / pdf;
@@ -138,7 +173,8 @@ float3 trace_ray(Ray ray, Rng& rng, Volume volume, PLF plf) {
         float3 wo = float3(tangent.x * wo_t.x + normal.x * wo_t.y + bitangent.x * wo_t.z,
                            tangent.y * wo_t.x + normal.y * wo_t.y + bitangent.y * wo_t.z,
                            tangent.z * wo_t.x + normal.z * wo_t.y + bitangent.z * wo_t.z);
-    
+   
+
         // Find the next bounce direction
         ray.origin = hit.position;
         ray.direction = normalize(wo);
@@ -147,48 +183,55 @@ float3 trace_ray(Ray ray, Rng& rng, Volume volume, PLF plf) {
     return color;
 }
 
+// TODO: Integrate into transfer function editor? Sooo slow to iterate when I do this by hand
 PLF get_transfer_function() {
-    DisneyMaterial air;
-    air.Transmission = 1.0f;
+    DisneyMaterial one;
+    one.Transmission = 1.0f;
+    one.BaseColor = float3(0.62f, 0.62f, 0.64f);
+    one.Specular = 0.03f;
+    one.Emission = float3(0.f);
+    one.Roughness = 1.f;
 
-    DisneyMaterial tissue;
-    tissue.BaseColor = float3(0.6f, 0.1f, 0.1f);
-    tissue.Metallic = 0.0f;
-    tissue.Emission = float3(0.f);
-    tissue.Specular = 0.f;
-    tissue.Anisotropy = 0.f;
-    tissue.Roughness = 0.8f;
-    tissue.SpecularTint = 0.1f;
-    tissue.SheenTint = 0.0f;
-    tissue.Sheen = 0.0f;
-    tissue.ClearcoatGloss = 0.1f;
-    tissue.Clearcoat = 0.1f;
-    tissue.Subsurface = 0.2f;
-    tissue.Transmission = 0.f;
+    DisneyMaterial two;
+    two.Transmission = 1.0f;
+    two.BaseColor = float3(0.17f, 0.f, 0.f);
+    two.Specular = 0.66f;
+    two.Emission = float3(0.f);
+    two.Roughness = 0.f;
 
-    DisneyMaterial bone;
-    bone.BaseColor = float3(1.0f, 1.0f, 1.0f);
-    bone.Metallic = 0.0f;
-    bone.Emission = float3(0.f);
-    bone.Specular = 0.1f;
-    bone.Anisotropy = 0.1f;
-    bone.Roughness = 0.8f;
-    bone.SpecularTint = 0.1f;
-    bone.SheenTint = 0.0f;
-    bone.Sheen = 0.0f;
-    bone.ClearcoatGloss = 0.1f;
-    bone.Clearcoat = 0.1f;
-    bone.Subsurface = 0.0f;
-    bone.Transmission = 0.f;
+    DisneyMaterial three;
+    three.Transmission = 0.982972f;
+    three.BaseColor = float3(0.17f, 0.02f, 0.02f);
+    three.Specular = 0.19f;
+    three.Emission = float3(0.f);
+    three.Roughness = 0.5868f;
 
-    PLF plf(air, air);
+    DisneyMaterial four;
+    four.Transmission = 0.436498f;
+    four.BaseColor = float3(0.26f, 0.f, 0.f);
+    four.Specular = 0.027f;
+    four.Emission = float3(0.f);
+    four.Roughness = 0.0744f;
 
-    plf.add_material(999, air);
-    plf.add_material(1000, tissue);
-    plf.add_material(1001, air);
-    plf.add_material(1999, air);
-    plf.add_material(2000, bone);
-    plf.add_material(2001, air);
+    DisneyMaterial five;
+    five.Transmission = 0.0f;
+    five.BaseColor = float3(0.337f, 0.282f, 0.16f);
+    five.Specular = 0.0078f;
+    five.Emission = float3(0.f);
+    five.Roughness = 0.1322f;
+
+    DisneyMaterial six;
+    six.Transmission = 0.0f;
+    six.BaseColor = float3(0.62745f, 0.62745f, 0.64313f);
+    six.Specular = 0.039f;
+    six.Emission = float3(0.f);
+    six.Roughness = 1.f;
+
+    PLF plf(one, six);
+    plf.add_material(15475, two);
+    plf.add_material(18909, three);
+    plf.add_material(18911, four);
+    plf.add_material(23200, five);
 
     return plf;
 }
@@ -204,6 +247,10 @@ float3 tonemap_aces(float3 hdr_color) {
 }
 
 int main(int argc, char** argv) {
+    argc = 3;
+    argv[1] = "..\\..\\..\\data\\Larry_2017\\";
+    argv[2] = "out.hdr";
+
     if (argc != 3) {
         cout << "Usage: mir <data folder> <output filename>" << endl;
         return 0;
@@ -211,18 +258,19 @@ int main(int argc, char** argv) {
 
     float3 size(1.f, 1.f, 1.f);
     Dicom d;
-    // Load only the spleen?
-    if (d.LoadDicomStack(argv[1], &size, 1)) {
+    if (d.LoadDicomStack(argv[1], &size, false, 1)) {
         cerr << "FATAL: Error loading Dicom stack" << endl;
         return -1;
     } else {
         cout << "Successfully loaded DCM stack" << endl;
     }
 
+    cout << "Maximum Sample Value " << d.max_value << endl;
+
     Rng rng;
     PLF plf = get_transfer_function();
 
-    Camera camera = Camera(float3(0, 0, -2.0f), float3(0, 0, 0), OUTPUT_WIDTH, OUTPUT_HEIGHT);
+    Camera camera = Camera(float3(0.4f, 0.4f, 0.4f), float3(0, 0, 0), float3(0, 0, 1), OUTPUT_WIDTH, OUTPUT_HEIGHT);
 
     cout << "Raytracing " << OUTPUT_WIDTH << "x" << OUTPUT_HEIGHT << " image" << endl;
     float3* image = new float3[OUTPUT_WIDTH * OUTPUT_HEIGHT];
@@ -234,9 +282,9 @@ int main(int argc, char** argv) {
             float3 hdr_color = 0;
             for (size_t i = 0; i < SAMPLES_PER_PIXEL; i++) {
                 Ray ray = camera.get_ray(x, y, true, rng);
-                hdr_color = trace_ray(ray, rng, d.volume, plf);
+                hdr_color += trace_ray(ray, rng, d.volume, plf);
             }
-            hdr_color /= (float)SAMPLES_PER_PIXEL;
+            hdr_color /= SAMPLES_PER_PIXEL;
 
             // Tonemap and gamma correct
             float3 ldr = tonemap_aces(hdr_color);

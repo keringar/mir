@@ -41,13 +41,14 @@ Dicom::Dicom() {
     volume.height = 0;
     volume.depth = 0;
     volume.size = 0;
+    max_value = 0;
 }
 
 Dicom::~Dicom() {
     delete[] volume.data;
 }
 
-int Dicom::LoadDicomStack(const string& folder, float3* size, uint8_t mask_value) {
+int Dicom::LoadDicomStack(const string& folder, float3* size, bool should_mask, uint8_t mask_value) {
     if (!filesystem::exists(folder)) {
         printf("Folder does not exist\n");
         return -1;
@@ -105,11 +106,11 @@ int Dicom::LoadDicomStack(const string& folder, float3* size, uint8_t mask_value
         images[i].image->setMinMaxWindow();
         uint16_t* pixels = (uint16_t*)images[i].image->getOutputData(16);
 
-        if (false) {
+        if (should_mask && organ_masks) {
             std::string path = std::string(folder) + "/mask/" + std::to_string(i) + ".png";
 
             int x, y, n;
-            stbi_set_flip_vertically_on_load(true);
+            stbi_set_flip_vertically_on_load(false);
             unsigned char* image = stbi_load(path.c_str(), &x, &y, &n, 1);
             if (image == nullptr) {
                 cerr << "Failed to load mask " << path << endl;
@@ -122,21 +123,24 @@ int Dicom::LoadDicomStack(const string& folder, float3* size, uint8_t mask_value
                 cerr << "x: " << x << " y: " << y << " n: " << n << endl;
                 return -1;
             }
-
             
             for (size_t mask_y = 0; mask_y < volume.height; mask_y++) {
                 for (size_t mask_x = 0; mask_x < volume.width; mask_x++) {
-
                     size_t index = mask_x + ((size_t)mask_y * volume.width);
-                    size_t mask = (size_t)image[index];
 
-                    if (mask != mask_value) {
+                    if (image[index] != mask_value) {
                         pixels[mask_y + mask_x * images[i].image->getWidth()] = 0;
                     }
                 }
             }
 
             stbi_image_free(image);
+        }
+
+        for (size_t j = 0; j < volume.width * volume.height; j++) {
+            if (pixels[j] > max_value) {
+                max_value = pixels[j];
+            }
         }
 
         memcpy(volume.data + i * volume.width * volume.height, pixels, volume.width * volume.height * sizeof(uint16_t));

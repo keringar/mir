@@ -23,7 +23,7 @@ private:
     float3 m_y_direction;
 
 public:
-    Camera(float3 position, float3 target, int width, int height);
+    Camera(float3 position, float3 target, float3 up, int width, int height);
     int get_width();
     int get_height();
     Ray get_ray(int x, int y, bool jitter, Rng& rng);

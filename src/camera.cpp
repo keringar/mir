@@ -1,7 +1,7 @@
 #include "ray.h"
 #include "camera.h"
 
-Camera::Camera(float3 position, float3 target, int width, int height) {
+Camera::Camera(float3 position, float3 target, float3 up, int width, int height) {
     m_width = width;
     m_width_recp = 1.f / m_width;
     m_height = height;
@@ -10,7 +10,7 @@ Camera::Camera(float3 position, float3 target, int width, int height) {
 
     m_position = position;
     m_direction = normalize(target - m_position);
-    m_x_direction = normalize(cross(float3(0.f, 1.f, 0.f), m_direction * -1));
+    m_x_direction = normalize(cross(up, m_direction * -1));
     m_y_direction = normalize(cross(m_x_direction, m_direction));
 
     m_x_spacing = (2.0f * m_ratio) / (float)m_width;
