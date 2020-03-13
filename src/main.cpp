@@ -15,10 +15,10 @@
 
 using namespace std;
 
-#define OUTPUT_WIDTH 128
-#define OUTPUT_HEIGHT 128
+#define OUTPUT_WIDTH 1024
+#define OUTPUT_HEIGHT 1024
 #define NUM_BOUNCES 1
-#define SAMPLES_PER_PIXEL 8
+#define SAMPLES_PER_PIXEL 1000
 #define MAX_DENSITY 1.f // affects the chance of check for a hit being true
 #define DENSITY_MULTIPLIER 100.f // increases probability of checking for a hit
 
@@ -38,8 +38,7 @@ ScatterEvent SampleVolume(const Ray ray, Rng& rng, Volume v, PLF& plf) {
     result.distance = 0.f;
 
     /* Ray Marching */
-    /*
-    while (result.distance < 3.f) {
+    while (result.distance < 2.f) {
         result.distance += 0.001f;
 
         // Check if out of bounds
@@ -62,10 +61,10 @@ ScatterEvent SampleVolume(const Ray ray, Rng& rng, Volume v, PLF& plf) {
             break;
         }
     }
-    */
 
     /* Delta tracking for volumetric scattering */
-    while (result.distance < 3.f) {
+    /*
+    while (result.distance < 1.f) {
         result.distance -= logf(1.f - rng.generate()) / (MAX_DENSITY * DENSITY_MULTIPLIER);
 
         float3 current_point = ray.origin + ray.direction * result.distance;
@@ -84,6 +83,7 @@ ScatterEvent SampleVolume(const Ray ray, Rng& rng, Volume v, PLF& plf) {
             break;
         }
     }
+    */
 
     return result;
 }
@@ -247,10 +247,6 @@ float3 tonemap_aces(float3 hdr_color) {
 }
 
 int main(int argc, char** argv) {
-    argc = 3;
-    argv[1] = "..\\..\\..\\data\\Larry_2017\\";
-    argv[2] = "out.hdr";
-
     if (argc != 3) {
         cout << "Usage: mir <data folder> <output filename>" << endl;
         return 0;
@@ -270,7 +266,7 @@ int main(int argc, char** argv) {
     Rng rng;
     PLF plf = get_transfer_function();
 
-    Camera camera = Camera(float3(0.4f, 0.4f, 0.4f), float3(0, 0, 0), float3(0, 0, 1), OUTPUT_WIDTH, OUTPUT_HEIGHT);
+    Camera camera = Camera(float3(0.3f, 0.4f, 0.3f), float3(0, 0, 0), float3(0, 0, 1), OUTPUT_WIDTH, OUTPUT_HEIGHT);
 
     cout << "Raytracing " << OUTPUT_WIDTH << "x" << OUTPUT_HEIGHT << " image" << endl;
     float3* image = new float3[OUTPUT_WIDTH * OUTPUT_HEIGHT];
